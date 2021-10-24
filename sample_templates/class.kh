@@ -1,0 +1,13 @@
+namespace %NAMESPACE% {
+class %CLASSNAME%_descriptor : public descriptor{
+  public:
+  %CLASSNAME%_descriptor() : descriptor("%CLASSNAME%", nullptr) {
+%FIELDS%
+    }
+};
+}
+
+descriptor* %NAMESPACE%::%CLASSNAME%::get_descriptor() {
+  static %NAMESPACE%::%CLASSNAME%_descriptor desc;
+  return &desc;
+}

@@ -1,0 +1,6 @@
+// This file was generated automatically using the katsu code analyzer or whatever they are called
+// https://github.com/crax97/katsu 
+
+#include "object/descriptor.h"
+#include "object/object.h"
+
