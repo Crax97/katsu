@@ -6,6 +6,7 @@
 #include <clang-c/Index.h>
 #include <memory>
 #include <iostream>
+#include <cassert>
 
 void katsu::ast_visitor::visit_class_decl(const CXCursor &cursor) {
     auto class_name = clang_getCursorSpelling(cursor);
@@ -19,6 +20,17 @@ void katsu::ast_visitor::visit_class_decl(const CXCursor &cursor) {
 void katsu::ast_visitor::visit_field_decl(const CXCursor &cursor) {
     auto type_spelling = clang_getTypeSpelling(clang_getCursorType(cursor));
     auto var_name = clang_getCursorSpelling(cursor);
+
+    auto semantic_parent = clang_getCursorSemanticParent(cursor);
+
+    if(m_classes.empty() || !clang_equalCursors(m_classes.back().cursor, semantic_parent)) {
+        auto parent_name = clang_getCString(clang_getCursorSpelling(semantic_parent));
+        std::cerr << "FAILURE while walking through " << clang_getCString(var_name) << " belonging to " << parent_name << "\n";
+        std::cerr << "Maybe you forgot to REFLECT " << parent_name <<"?\n";
+        std::exit(-1);
+    }
+
+    assert(!m_classes.empty());
     m_classes.back().fields.push_back({
                           cursor,
                           clang_getCString(type_spelling),
@@ -45,25 +57,28 @@ void katsu::ast_visitor::visit_annotation_decl(const CXCursor &cursor, const CXC
 void katsu::ast_visitor::dispatch_visit(const CXCursor &current, const CXCursor &parent, CXClientData Data) {
     CXCursorKind kind = clang_getCursorKind(current);
     CXCursorKind parent_kind = clang_getCursorKind(parent);
+    if (kind == CXCursor_ClassDecl) {
+        CXCursor class_namespace = get_class_namespace(current);
+        if(clang_getCursorKind(class_namespace) == CXCursor_TranslationUnit) {
+            return;
+        }
+        // Roll back to the previous namespace
+        while(!m_namespace_stack.empty() && !clang_equalCursors(class_namespace, m_namespace_stack.back())) {
+            exit_namespace_decl(class_namespace);
+        }
+    }
 
     if (kind == CXCursor_AnnotateAttr) {
         visit_annotation_decl(current, parent);
     } else if (kind == CXCursor_Namespace) {
         visit_namespace_decl(current);
-    } else if (kind == CXCursor_ClassDecl) {
-        CXCursor class_namespace = get_class_namespace(current);
-        if(clang_getCursorKind(class_namespace) == CXCursor_TranslationUnit) return;
-        // Roll back to the previous namespace
-        while(!m_namespace_stack.empty() && !clang_equalCursors(class_namespace, m_namespace_stack.back())) {
-            exit_namespace_decl(class_namespace);
-        }
     }
 }
 
 CXCursor katsu::ast_visitor::get_class_namespace(const CXCursor &current) {
     CXCursor class_namespace = clang_getCursorSemanticParent(current);
     CXCursorKind namespace_kind = clang_getCursorKind(class_namespace);
-    while (namespace_kind != CXCursor_Namespace && namespace_kind != CXCursor_TranslationUnit) {
+    while (namespace_kind != CXCursor_Namespace && namespace_kind != CXCursor_TranslationUnit)  {
         class_namespace = clang_getCursorSemanticParent(class_namespace);
         namespace_kind = clang_getCursorKind(class_namespace);
     }
