@@ -17,6 +17,7 @@ struct field_descriptor {
 struct class_descriptor {
     CXCursor cursor;
     std::string class_name;
+    bool is_reflecting = false;
     std::list<field_descriptor> fields;
     std::list<std::string> namespaces;
 

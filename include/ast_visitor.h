@@ -19,11 +19,13 @@ namespace katsu {
         ast_visitor(const options& opts) :
             m_opts(opts) { }
     protected:
+        void reflect_class_begin(const CXCursor& cursor);
+        
         void visit_class_decl(const CXCursor& cursor);
         void visit_field_decl(const CXCursor& cursor);
         void visit_method_decl(const CXCursor& cursor);
         void visit_namespace_decl(const CXCursor& namespace_cursor);
-        void exit_namespace_decl(const CXCursor& namespace_cursor);
+        void exit_namespace_decl(CXCursor namespace_cursor);
         void visit_annotation_decl(const CXCursor& cursor, const CXCursor& parent);
     public:
         void dispatch_visit(const CXCursor& current, const CXCursor& parent, CXClientData Data);

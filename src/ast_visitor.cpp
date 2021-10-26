@@ -17,27 +17,38 @@ struct visitor_fn_data {
     CXFile main_file;
 }; 
 
-void katsu::ast_visitor::visit_class_decl(const CXCursor &cursor) {
+void katsu::ast_visitor::reflect_class_begin(const CXCursor &cursor) {
+    assert(!m_classes.empty());
+    m_classes.back().is_reflecting = true;
+}
+
+void katsu::ast_visitor::visit_class_decl(const CXCursor& cursor) {
     auto class_name = clang_getCursorSpelling(cursor);
     std::list<std::string> namespace_names = collect_namespace_names();
-    m_classes.push_back({
-                              cursor, clang_getCString(class_name), {}, namespace_names});
+    m_classes.push_back({cursor, clang_getCString(class_name), true, {}, namespace_names});
     clang_disposeString(class_name);
+    
 }
 
 void katsu::ast_visitor::visit_field_decl(const CXCursor &cursor) {
     auto type_spelling = clang_getTypeSpelling(clang_getCursorType(cursor));
     auto var_name = clang_getCursorSpelling(cursor);
 
-    auto semantic_parent = clang_getCursorSemanticParent(cursor);
+    if(m_opts.is_debug) {
+        std::cout << "Class: " << m_classes.back().class_name << "\n";
+        std::cout << "\tIs reflecting? " << m_classes.back().is_reflecting << "\n";
+        std::cout << "\tField " << clang_getCString(type_spelling) << " " << clang_getCString(var_name) << "\n";
+    }
 
-    if(m_classes.empty() || !clang_equalCursors(m_classes.back().cursor, semantic_parent)) {
+    if(!m_classes.back().is_reflecting) {
+        auto semantic_parent = clang_getCursorSemanticParent(cursor);
         auto parent_name = clang_getCString(clang_getCursorSpelling(semantic_parent));
         std::cerr << "FAILURE while walking through " << clang_getCString(var_name) << " belonging to " << parent_name << "\n";
         std::cerr << "Maybe you forgot to REFLECT " << parent_name <<"?\n";
         std::exit(-1);
     }
-
+    
+    auto semantic_parent = clang_getCursorSemanticParent(cursor);
     assert(!m_classes.empty());
     m_classes.back().fields.push_back({
                           cursor,
@@ -53,12 +64,14 @@ void katsu::ast_visitor::visit_method_decl(const CXCursor &cursor) {
 }
 
 void katsu::ast_visitor::visit_annotation_decl(const CXCursor &cursor, const CXCursor& parent) {
-    if(clang_Location_isFromMainFile (clang_getCursorLocation (cursor)) != 0) {
-        return;
-    }
     CXCursorKind parent_kind = clang_getCursorKind(parent);
+    if(m_opts.is_debug) {
+        auto kind_string = clang_getCursorKindSpelling(parent_kind);
+        std::cout << "Annotation parent: " << clang_getCString(kind_string) << "\n";
+        clang_disposeString(kind_string);
+    }
     if(parent_kind == CXCursor_ClassDecl) {
-        visit_class_decl(parent);
+        reflect_class_begin(parent);
     } else if (parent_kind == CXCursor_FieldDecl) {
         visit_field_decl(parent);
     }
@@ -66,37 +79,24 @@ void katsu::ast_visitor::visit_annotation_decl(const CXCursor &cursor, const CXC
 
 
 void katsu::ast_visitor::dispatch_visit(const CXCursor &current, const CXCursor &parent, CXClientData Data) {
+    if(clang_Location_isFromMainFile (clang_getCursorLocation (current)) == 0) {
+        return;
+    }
     CXCursorKind kind = clang_getCursorKind(current);
     CXCursorKind parent_kind = clang_getCursorKind(parent);
-
-    if(m_opts.is_debug) {
-        auto kind_string = clang_getCursorKindSpelling(kind);
-        std::cout << "Found " << clang_getCString(kind_string) << "\n";
-        clang_disposeString(kind_string);
-    }
-
     if (kind == CXCursor_ClassDecl) {
-        CXCursor class_namespace = get_class_namespace(current);
-        if(clang_getCursorKind(class_namespace) == CXCursor_TranslationUnit) {
-            return;
-        }
-        // Roll back to the previous namespace
-        while(!m_namespace_stack.empty() && !clang_equalCursors(class_namespace, m_namespace_stack.back())) {
-            exit_namespace_decl(class_namespace);
-        }
-    }
-
-    if (kind == CXCursor_AnnotateAttr) {
-        visit_annotation_decl(current, parent);
+        visit_class_decl(current);
     } else if (kind == CXCursor_Namespace) {
         visit_namespace_decl(current);
-    }
+    } else if (kind == CXCursor_AnnotateAttr) {
+        visit_annotation_decl(current, parent);
+    } 
 }
 
 CXCursor katsu::ast_visitor::get_class_namespace(const CXCursor &current) {
     CXCursor class_namespace = clang_getCursorSemanticParent(current);
     CXCursorKind namespace_kind = clang_getCursorKind(class_namespace);
-    while (namespace_kind != CXCursor_Namespace && namespace_kind != CXCursor_TranslationUnit)  {
+    while (namespace_kind != CXCursor_Namespace && namespace_kind != CXCursor_TranslationUnit && namespace_kind != CXCursor_InvalidFile)  {
         class_namespace = clang_getCursorSemanticParent(class_namespace);
         namespace_kind = clang_getCursorKind(class_namespace);
     }
@@ -131,10 +131,19 @@ katsu::ast_visitor katsu::ast_visitor::begin_visit(const CXTranslationUnit& tran
 }
 
 void katsu::ast_visitor::visit_namespace_decl(const CXCursor &namespace_cursor) {
+    auto namespace_parent = clang_getCursorSemanticParent(namespace_cursor);
+    auto namespace_parent_kind = clang_getCursorKind(namespace_parent);
+    if(namespace_parent_kind == CXCursor_TranslationUnit) {
+        m_namespace_stack.clear();
+    } else if (!m_namespace_stack.empty()) {
+        while(!m_namespace_stack.empty() && (clang_equalCursors(namespace_parent, m_namespace_stack.back()) == 0)) {
+            exit_namespace_decl(m_namespace_stack.back());
+        }
+    }
     m_namespace_stack.emplace_back(namespace_cursor);
 }
 
-void katsu::ast_visitor::exit_namespace_decl(const CXCursor &namespace_cursor) {
+void katsu::ast_visitor::exit_namespace_decl(CXCursor namespace_cursor) {
     m_namespace_stack.pop_back();
 }
 
