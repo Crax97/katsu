@@ -47,11 +47,6 @@ int main(int argc, const char** argv) {
         std::cerr << "Wrong usage: Give me some files\n";
         return -1;
     }
-    const char* args[] = {
-            "c++",
-            "-std=c++17",
-            "-E"
-    };
 
     katsu::option_parser parser;
     // parser.add_option("o", "output folder", "gen");
@@ -75,12 +70,31 @@ int main(int argc, const char** argv) {
     
     opts.is_debug = parser.is_set("d");
 
+    auto args = std::vector<std::string>({
+            "c++",
+            "-std=c++17",
+            "-E"
+    });
+
+    if(parser.is_set("I")) {
+        auto includes = parser.get_arguments("I").value();
+        for(const auto& include_dir : includes) {
+            auto include_dir_command = std::string("-I") + std::string(include_dir);
+            std::cout << "Using additional include directory " << include_dir_command << "\n";
+            args.emplace_back(std::move(include_dir_command));
+        } 
+    }
     katsu::data_writer_templates temp;
     temp.class_template = read_file(opts.templates_folder / "class.kh");
     temp.field_template = read_file(opts.templates_folder / "field.kh");
     temp.header_template = read_file(opts.templates_folder / "header.kh");
 
     katsu::data_writer writer(temp);
+
+    const char** c_args = new const char*[args.size()];
+    for(int i = 0; i < args.size(); i ++) {
+        c_args[i] = args[i].c_str();
+    }
 
     CXIndex index = clang_createIndex(0, 0);
     for(auto& source : parser.get_positional_arguments()) {
@@ -100,7 +114,7 @@ int main(int argc, const char** argv) {
         CXTranslationUnit unit = clang_parseTranslationUnit(
                 index,
                 source.data(),
-                args, sizeof(args) / sizeof(char*),
+                c_args, args.size(),
                 nullptr, 0,
                 CXTranslationUnit_None
         );
@@ -127,5 +141,6 @@ int main(int argc, const char** argv) {
             writer.write_to_file(visitor, output_file);
         }
     }
+    delete c_args;
     clang_disposeIndex(index);
 }

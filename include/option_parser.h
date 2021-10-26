@@ -7,6 +7,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <list>
 #include <optional>
 #include <charconv>
 #include <cassert>
@@ -23,7 +24,7 @@ namespace katsu {
     class option_parser {
     private:
         bool m_positional_enabled{};
-        std::unordered_map<std::string_view, std::string_view> m_arguments{};
+        std::unordered_map<std::string_view, std::list<std::string_view>> m_arguments{};
         std::vector<std::string_view> m_positional_arguments{};
 
         struct key_value {
@@ -57,7 +58,7 @@ namespace katsu {
         void parse_options(int begin, int argc, const char** argv) {
             for(int i = begin; i < argc; i++) {
                 auto [key, value] = split_option(argv[i]);
-                m_arguments[key] = value;
+                m_arguments[key].emplace_back(value);
             }
         }
     public:
@@ -84,7 +85,15 @@ namespace katsu {
         std::optional<T> get_argument(std::string_view key) const {
             auto found = m_arguments.find(key);
             if(found != m_arguments.end()) {
-                return katsu::detail::from_string<T>(found->second);
+                return katsu::detail::from_string<T>(found->second.front());
+            }
+            return {};
+        }
+
+        std::optional<std::list<std::string_view>> get_arguments(std::string_view key) const {
+            auto found = m_arguments.find(key);
+            if(found != m_arguments.end()) {
+                return found->second;
             }
             return {};
         }
