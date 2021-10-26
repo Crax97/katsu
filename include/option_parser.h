@@ -132,9 +132,9 @@ namespace katsu::detail {
         }
         template <> std::optional<bool> from_string(const std::string_view &val) { return val != "false" && val != "0"; }
 
-        template <> std::optional<float> from_string(const std::string_view &val) { return safe_convert<float>(val); }
+        template <> std::optional<float> from_string(const std::string_view &val) { return std::stof(std::string(val)); }
         template <> std::optional<double> from_string(const std::string_view &val) {
-          return safe_convert<double>(val);
+          return std::stod(std::string(val));
         }
     }
 #endif

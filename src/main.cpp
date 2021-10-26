@@ -5,16 +5,14 @@
 
 #include <clang-c/Index.h>
 
+#include "options.h"
 #include "ast_visitor.h"
 #include "data_writer.h"
 
 #define KATSU_DEFINE_IMPLEMENTATION
 #include "option_parser.h"
 
-struct options {
-    std::filesystem::path output_path = "gen";
-    std::filesystem::path templates_folder = "templates";
-} opts;
+options opts;
 
 std::string read_file(const std::filesystem::path& file_path) {
     std::fstream file;
@@ -74,6 +72,8 @@ int main(int argc, const char** argv) {
     if(!exists(abs_output_path)) {
         std::filesystem::create_directory(abs_output_path);
     }
+    
+    opts.is_debug = parser.is_set("d");
 
     katsu::data_writer_templates temp;
     temp.class_template = read_file(opts.templates_folder / "class.kh");
@@ -82,6 +82,7 @@ int main(int argc, const char** argv) {
 
     katsu::data_writer writer(temp);
 
+    CXIndex index = clang_createIndex(0, 0);
     for(auto& source : parser.get_positional_arguments()) {
 
 
@@ -90,7 +91,6 @@ int main(int argc, const char** argv) {
                 {"REFLECT", "__attribute__((annotate(\"reflect\")))"}
         });
         write_file("temp.hpp", source_content);
-        CXIndex index = clang_createIndex(0, 0);
         CXTranslationUnit unit = clang_parseTranslationUnit(
                 index,
                 "temp.hpp",
@@ -104,7 +104,7 @@ int main(int argc, const char** argv) {
             continue;
         }
 
-        katsu::ast_visitor visitor = katsu::ast_visitor::begin_visit(unit);
+        katsu::ast_visitor visitor = katsu::ast_visitor::begin_visit(unit, opts);
         clang_disposeTranslationUnit(unit);
         clang_disposeIndex(index);
 
@@ -122,5 +122,8 @@ int main(int argc, const char** argv) {
         std::cout << "writing to " << output_filename << "\n";
 
         writer.write_to_file(visitor, output_file);
+        if(opts.is_debug) {
+            writer.write_to_file(visitor, std::cout);
+        }
     }
 }

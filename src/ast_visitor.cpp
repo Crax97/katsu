@@ -3,6 +3,7 @@
 //
 
 #include "ast_visitor.h"
+
 #include <clang-c/Index.h>
 #include <memory>
 #include <iostream>
@@ -10,7 +11,6 @@
 
 void katsu::ast_visitor::visit_class_decl(const CXCursor &cursor) {
     auto class_name = clang_getCursorSpelling(cursor);
-
     std::list<std::string> namespace_names = collect_namespace_names();
     m_classes.push_back({
                               cursor, clang_getCString(class_name), {}, namespace_names});
@@ -57,6 +57,13 @@ void katsu::ast_visitor::visit_annotation_decl(const CXCursor &cursor, const CXC
 void katsu::ast_visitor::dispatch_visit(const CXCursor &current, const CXCursor &parent, CXClientData Data) {
     CXCursorKind kind = clang_getCursorKind(current);
     CXCursorKind parent_kind = clang_getCursorKind(parent);
+
+    if(m_opts.is_debug) {
+        auto kind_string = clang_getCursorKindSpelling(kind);
+        std::cout << "Found " << clang_getCString(kind_string) << "\n";
+        clang_disposeString(kind_string);
+    }
+
     if (kind == CXCursor_ClassDecl) {
         CXCursor class_namespace = get_class_namespace(current);
         if(clang_getCursorKind(class_namespace) == CXCursor_TranslationUnit) {
@@ -85,9 +92,9 @@ CXCursor katsu::ast_visitor::get_class_namespace(const CXCursor &current) {
     return class_namespace;
 }
 
-katsu::ast_visitor katsu::ast_visitor::begin_visit(const CXTranslationUnit& translation_unit) {
+katsu::ast_visitor katsu::ast_visitor::begin_visit(const CXTranslationUnit& translation_unit, const options& opts) {
 
-    katsu::ast_visitor visitor;
+    katsu::ast_visitor visitor(opts);
     auto visit_fn = [](CXCursor c, CXCursor p, CXClientData data)
     {
         if (clang_Location_isFromMainFile (clang_getCursorLocation (c)) == 0) {
