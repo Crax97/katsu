@@ -32,6 +32,8 @@ namespace katsu {
             return m_classes;
         }
 
+        const options& get_opts() const { return m_opts; }
+
         static CXCursor get_class_namespace(const CXCursor &current) ;
 
         std::list<std::string> collect_namespace_names();

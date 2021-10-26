@@ -8,6 +8,14 @@
 #include <memory>
 #include <iostream>
 #include <cassert>
+#include <cstring>
+
+
+struct visitor_fn_data {
+    katsu::ast_visitor& visitor;
+    std::string main_file_name;
+    CXFile main_file;
+}; 
 
 void katsu::ast_visitor::visit_class_decl(const CXCursor &cursor) {
     auto class_name = clang_getCursorSpelling(cursor);
@@ -45,6 +53,9 @@ void katsu::ast_visitor::visit_method_decl(const CXCursor &cursor) {
 }
 
 void katsu::ast_visitor::visit_annotation_decl(const CXCursor &cursor, const CXCursor& parent) {
+    if(clang_Location_isFromMainFile (clang_getCursorLocation (cursor)) != 0) {
+        return;
+    }
     CXCursorKind parent_kind = clang_getCursorKind(parent);
     if(parent_kind == CXCursor_ClassDecl) {
         visit_class_decl(parent);
@@ -93,20 +104,29 @@ CXCursor katsu::ast_visitor::get_class_namespace(const CXCursor &current) {
 }
 
 katsu::ast_visitor katsu::ast_visitor::begin_visit(const CXTranslationUnit& translation_unit, const options& opts) {
+ 
 
     katsu::ast_visitor visitor(opts);
-    auto visit_fn = [](CXCursor c, CXCursor p, CXClientData data)
+    auto visit_fn = [](CXCursor c, CXCursor p, CXClientData client_data)
     {
-        if (clang_Location_isFromMainFile (clang_getCursorLocation (c)) == 0) {
-            return CXChildVisit_Continue;
-        }
-        katsu::ast_visitor& in_visitor = *static_cast<katsu::ast_visitor*>(data);
-        in_visitor.dispatch_visit(c, p, data);
+        auto visitor_data = *static_cast<visitor_fn_data*>(client_data);
+        katsu::ast_visitor& in_visitor = visitor_data.visitor;
+        in_visitor.dispatch_visit(c, p, client_data);
         return CXChildVisit_Recurse;
     };
     CXCursor root_cursor = clang_getTranslationUnitCursor(translation_unit);
+    auto tu_name = clang_getTranslationUnitSpelling(translation_unit);
+    auto data = visitor_fn_data {
+        visitor,
+        clang_getCString(tu_name)
+    };
+    clang_disposeString(tu_name);
+
+    data.main_file = clang_getFile(translation_unit, data.main_file_name.c_str());
+    std::cout << "Begin from " << data.main_file_name << "\n";
+
     clang_visitChildren(root_cursor,
-                        visit_fn, &visitor);
+                        visit_fn, &data);
     return visitor;
 }
 

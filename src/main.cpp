@@ -50,7 +50,7 @@ int main(int argc, const char** argv) {
     const char* args[] = {
             "c++",
             "-std=c++17",
-            "-DREFLECT=__attribute__((annotate(\"reflect\")))"
+            "-E"
     };
 
     katsu::option_parser parser;
@@ -86,15 +86,21 @@ int main(int argc, const char** argv) {
     for(auto& source : parser.get_positional_arguments()) {
 
 
-        auto source_content = read_file(source);
-        replace_all(source_content, {
-                {"REFLECT", "__attribute__((annotate(\"reflect\")))"}
-        });
-        write_file("temp.hpp", source_content);
+        // auto source_content = read_file(source);
+        // replace_all(source_content, {
+        //         {"REFLECT", "__attribute__((annotate(\"reflect\")))"}
+        // });
+
+        auto ext = std::filesystem::path(source).extension();
+        auto filename = std::filesystem::path(source).filename().replace_extension("").string();
+        auto output_filename = filename + std::string(".gen") + ext.string();
+        // auto temp_filename = filename + std::string(".temp") + ext.string();
+
+        // write_file(temp_filename, source_content);
         CXTranslationUnit unit = clang_parseTranslationUnit(
                 index,
-                "temp.hpp",
-                args, 2,
+                source.data(),
+                args, sizeof(args) / sizeof(char*),
                 nullptr, 0,
                 CXTranslationUnit_None
         );
@@ -106,11 +112,6 @@ int main(int argc, const char** argv) {
 
         katsu::ast_visitor visitor = katsu::ast_visitor::begin_visit(unit, opts);
         clang_disposeTranslationUnit(unit);
-        clang_disposeIndex(index);
-
-        auto ext = std::filesystem::path(source).extension();
-        auto filename = std::filesystem::path(source).filename().replace_extension("").string();
-        auto output_filename = filename + std::string(".gen") + ext.string();
 
         std::fstream output_file;
         output_file.open(abs_output_path / output_filename, std::ios_base::out | std::ios_base::trunc);
@@ -120,10 +121,11 @@ int main(int argc, const char** argv) {
         }
 
         std::cout << "writing to " << output_filename << "\n";
-
-        writer.write_to_file(visitor, output_file);
         if(opts.is_debug) {
             writer.write_to_file(visitor, std::cout);
+        } else {
+            writer.write_to_file(visitor, output_file);
         }
     }
+    clang_disposeIndex(index);
 }
