@@ -15,22 +15,27 @@ struct visitor_fn_data {
     katsu::ast_visitor& visitor;
     std::string main_file_name;
     CXFile main_file;
+    CXTranslationUnit main_unit;
 }; 
 
 void katsu::ast_visitor::reflect_class_begin(const CXCursor &cursor) {
+    if(clang_Location_isFromMainFile(clang_getCursorLocation(cursor)) == 0) return;
     assert(!m_classes.empty());
     m_classes.back().is_reflecting = true;
 }
 
 void katsu::ast_visitor::visit_class_decl(const CXCursor& cursor) {
+    if(clang_Location_isFromMainFile(clang_getCursorLocation(cursor)) == 0) return;
     auto class_name = clang_getCursorSpelling(cursor);
+    const char* class_name_c = clang_getCString(class_name);
     std::list<std::string> namespace_names = collect_namespace_names();
-    m_classes.push_back({cursor, clang_getCString(class_name), true, {}, namespace_names});
+    m_classes.push_back({cursor, class_name_c, false, {}, namespace_names});
     clang_disposeString(class_name);
     
 }
 
 void katsu::ast_visitor::visit_field_decl(const CXCursor &cursor) {
+    if(clang_Location_isFromMainFile(clang_getCursorLocation(cursor)) == 0) return;
     auto type_spelling = clang_getTypeSpelling(clang_getCursorType(cursor));
     auto var_name = clang_getCursorSpelling(cursor);
 
@@ -47,8 +52,7 @@ void katsu::ast_visitor::visit_field_decl(const CXCursor &cursor) {
         std::cerr << "Maybe you forgot to REFLECT " << parent_name <<"?\n";
         std::exit(-1);
     }
-    
-    auto semantic_parent = clang_getCursorSemanticParent(cursor);
+
     assert(!m_classes.empty());
     m_classes.back().fields.push_back({
                           cursor,
@@ -65,11 +69,6 @@ void katsu::ast_visitor::visit_method_decl(const CXCursor &cursor) {
 
 void katsu::ast_visitor::visit_annotation_decl(const CXCursor &cursor, const CXCursor& parent) {
     CXCursorKind parent_kind = clang_getCursorKind(parent);
-    if(m_opts.is_debug) {
-        auto kind_string = clang_getCursorKindSpelling(parent_kind);
-        std::cout << "Annotation parent: " << clang_getCString(kind_string) << "\n";
-        clang_disposeString(kind_string);
-    }
     if(parent_kind == CXCursor_ClassDecl) {
         reflect_class_begin(parent);
     } else if (parent_kind == CXCursor_FieldDecl) {
@@ -79,18 +78,18 @@ void katsu::ast_visitor::visit_annotation_decl(const CXCursor &cursor, const CXC
 
 
 void katsu::ast_visitor::dispatch_visit(const CXCursor &current, const CXCursor &parent, CXClientData Data) {
-    if(clang_Location_isFromMainFile (clang_getCursorLocation (current)) == 0) {
-        return;
-    }
     CXCursorKind kind = clang_getCursorKind(current);
     CXCursorKind parent_kind = clang_getCursorKind(parent);
+
     if (kind == CXCursor_ClassDecl) {
         visit_class_decl(current);
     } else if (kind == CXCursor_Namespace) {
         visit_namespace_decl(current);
     } else if (kind == CXCursor_AnnotateAttr) {
         visit_annotation_decl(current, parent);
-    } 
+    } else if (kind == CXCursor_MacroExpansion) {
+        // auto macro_text = clang_tokenize()
+    }
 }
 
 CXCursor katsu::ast_visitor::get_class_namespace(const CXCursor &current) {
@@ -110,8 +109,12 @@ katsu::ast_visitor katsu::ast_visitor::begin_visit(const CXTranslationUnit& tran
     auto visit_fn = [](CXCursor c, CXCursor p, CXClientData client_data)
     {
         auto visitor_data = *static_cast<visitor_fn_data*>(client_data);
-        katsu::ast_visitor& in_visitor = visitor_data.visitor;
-        in_visitor.dispatch_visit(c, p, client_data);
+        katsu::ast_visitor &in_visitor = visitor_data.visitor;
+        CXFile cursor_file;
+        clang_getFileLocation(clang_getCursorLocation(c), &cursor_file, nullptr, nullptr, nullptr);
+        if(cursor_file == visitor_data.main_file) {
+            in_visitor.dispatch_visit(c, p, client_data);
+        }
         return CXChildVisit_Recurse;
     };
     CXCursor root_cursor = clang_getTranslationUnitCursor(translation_unit);
@@ -124,6 +127,7 @@ katsu::ast_visitor katsu::ast_visitor::begin_visit(const CXTranslationUnit& tran
 
     data.main_file = clang_getFile(translation_unit, data.main_file_name.c_str());
     std::cout << "Begin from " << data.main_file_name << "\n";
+
 
     clang_visitChildren(root_cursor,
                         visit_fn, &data);

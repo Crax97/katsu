@@ -71,9 +71,9 @@ int main(int argc, const char** argv) {
     opts.is_debug = parser.is_set("d");
 
     auto args = std::vector<std::string>({
-            "c++",
-            "-std=c++17",
-            "-E"
+        "c++",
+        "-std=c++17",
+        "-DKATSU_GEN"
     });
 
     if(parser.is_set("I")) {
@@ -116,12 +116,20 @@ int main(int argc, const char** argv) {
                 source.data(),
                 c_args, args.size(),
                 nullptr, 0,
-                CXTranslationUnit_None
+                CXTranslationUnit_DetailedPreprocessingRecord
         );
 
         if (unit == nullptr) {
             std::cerr << "Could not open source " << source << "\n";
             continue;
+        }
+
+        size_t diagnostic = clang_getNumDiagnostics(unit);
+        for(int i = 0 ; i < diagnostic; i ++) {
+            CXDiagnostic diag = clang_getDiagnostic(unit, i);
+            auto diag_string = clang_getDiagnosticSpelling(diag);
+            std::cout << "Diagnostic for " << source << ": " << clang_getCString(diag_string) << "\n";
+            clang_disposeString(diag_string);
         }
 
         katsu::ast_visitor visitor = katsu::ast_visitor::begin_visit(unit, opts);
@@ -141,6 +149,6 @@ int main(int argc, const char** argv) {
             writer.write_to_file(visitor, output_file);
         }
     }
-    delete c_args;
+    delete[] c_args;
     clang_disposeIndex(index);
 }

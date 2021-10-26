@@ -11,11 +11,12 @@
 #include <set>
 
 void katsu::data_writer::write_to_file(const ast_visitor& visitor, std::ostream &output) const {
-    output << m_data_template.header_template;
     for (auto &klass: visitor.get_classes()) {
         if(!klass.is_reflecting) {
-            return;
+            continue;
         }
+
+        output << m_data_template.header_template;
         auto klass_string = std::string(m_data_template.class_template);
         std::stringstream m_fields;
         for (auto &field: klass.fields) {
