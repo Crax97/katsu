@@ -112,6 +112,8 @@ katsu::ast_visitor katsu::ast_visitor::begin_visit(const CXTranslationUnit& tran
         katsu::ast_visitor &in_visitor = visitor_data.visitor;
         CXFile cursor_file;
         clang_getFileLocation(clang_getCursorLocation(c), &cursor_file, nullptr, nullptr, nullptr);
+
+        // Avoid reflecting classes that don't belong to the main file
         if(cursor_file == visitor_data.main_file) {
             in_visitor.dispatch_visit(c, p, client_data);
         }

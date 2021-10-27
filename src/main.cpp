@@ -71,7 +71,8 @@ int main(int argc, const char** argv) {
     opts.is_debug = parser.is_set("d");
 
     auto args = std::vector<std::string>({
-        "c++",
+        "-xc++", // Treat headers as c++ source files
+        "-Wno-pragma-once-outside-header", // And disable "#pragma once" warnings as well
         "-std=c++17",
         "-DKATSU_GEN"
     });
