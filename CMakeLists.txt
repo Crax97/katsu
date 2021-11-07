@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 
 add_subdirectory(thirdparty/fmtlib)
 
-add_executable(katsu src/main.cpp include/ast_visitor.h include/types.h src/ast_visitor.cpp src/data_writer.cpp)
+add_executable(katsu src/main.cpp include/ast_visitor.h include/types.h src/ast_visitor.cpp src/data_writer.cpp tests/simpleobj.h tests/macros.h)
 
 target_link_libraries(katsu LLVMSupport libclang fmt)
 target_include_directories(katsu PRIVATE include ${LLVM_INCLUDE_DIR})

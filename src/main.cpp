@@ -89,6 +89,7 @@ int main(int argc, const char** argv) {
     temp.class_template = read_file(opts.templates_folder / "class.kh");
     temp.field_template = read_file(opts.templates_folder / "field.kh");
     temp.header_template = read_file(opts.templates_folder / "header.kh");
+    temp.method_template = read_file(opts.templates_folder / "method.kh");
 
     katsu::data_writer writer(temp);
 

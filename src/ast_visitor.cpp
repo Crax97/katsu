@@ -29,7 +29,7 @@ void katsu::ast_visitor::visit_class_decl(const CXCursor& cursor) {
     auto class_name = clang_getCursorSpelling(cursor);
     const char* class_name_c = clang_getCString(class_name);
     std::list<std::string> namespace_names = collect_namespace_names();
-    m_classes.push_back({cursor, class_name_c, false, {}, namespace_names});
+    m_classes.push_back({cursor, class_name_c, false, {}, {}, namespace_names});
     clang_disposeString(class_name);
     
 }
@@ -64,7 +64,37 @@ void katsu::ast_visitor::visit_field_decl(const CXCursor &cursor) {
 }
 
 void katsu::ast_visitor::visit_method_decl(const CXCursor &cursor) {
+    CXType method_type = clang_getCursorType(cursor);
+    CXType return_type = clang_getResultType(method_type);
+    size_t arg_count = clang_Cursor_getNumArguments(cursor);
+    CXString return_spelling = clang_getTypeSpelling(return_type);
+    CXString method_spelling = clang_getCursorSpelling(cursor);
+    method_descriptor descriptor = {
+            cursor,
+            clang_getCString(return_spelling),
+            clang_getCString(method_spelling),
+            {}
+    };
 
+    for(int i = 0; i < arg_count; i ++) {
+        CXCursor arg = clang_Cursor_getArgument(cursor, i);
+        CXType arg_type = clang_getCursorType(arg);
+        CXString arg_type_spelling = clang_getTypeSpelling(arg_type);
+        CXString arg_spelling = clang_getCursorSpelling(arg);
+
+        descriptor.parameters.push_back({
+            arg,
+            clang_getCString(arg_type_spelling),
+            clang_getCString(arg_spelling),
+        });
+
+        clang_disposeString(arg_type_spelling);
+        clang_disposeString(arg_spelling);
+    }
+
+    m_classes.back().methods.push_back(descriptor);
+    clang_disposeString(return_spelling);
+    clang_disposeString(method_spelling);
 }
 
 void katsu::ast_visitor::visit_annotation_decl(const CXCursor &cursor, const CXCursor& parent) {
@@ -73,6 +103,8 @@ void katsu::ast_visitor::visit_annotation_decl(const CXCursor &cursor, const CXC
         reflect_class_begin(parent);
     } else if (parent_kind == CXCursor_FieldDecl) {
         visit_field_decl(parent);
+    } else if(parent_kind == CXCursor_CXXMethod) {
+        visit_method_decl(parent);
     }
 }
 
@@ -80,7 +112,6 @@ void katsu::ast_visitor::visit_annotation_decl(const CXCursor &cursor, const CXC
 void katsu::ast_visitor::dispatch_visit(const CXCursor &current, const CXCursor &parent, CXClientData Data) {
     CXCursorKind kind = clang_getCursorKind(current);
     CXCursorKind parent_kind = clang_getCursorKind(parent);
-
     if (kind == CXCursor_ClassDecl) {
         visit_class_decl(current);
     } else if (kind == CXCursor_Namespace) {

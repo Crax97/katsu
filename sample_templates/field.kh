@@ -1,1 +1,1 @@
-    field_adder<%NAMESPACE%::%CLASSNAME%,decltype(%NAMESPACE%::%CLASSNAME%::%FIELDNAME%)>()(m_fields, "%FIELDNAME%", &%CLASSNAME%::%FIELDNAME%);
+            CORE_REFLECT_MEMBER(%FIELDNAME%)

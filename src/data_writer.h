@@ -29,6 +29,7 @@ namespace katsu {
         std::string class_template;
         std::string field_template;
         std::string header_template;
+        std::string method_template;
     };
 
     class data_writer {
